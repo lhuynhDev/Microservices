@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -14,30 +15,29 @@ func (app *Config) Authenticate(w http.ResponseWriter, r *http.Request) {
 
 	err := app.readJson(w, r, &requestPayload)
 	if err != nil {
-		app.writeError(w, err)
+		app.writeError(w, err, http.StatusBadRequest)
 		return
 	}
 
-	// Validate
-
+	// validate the user against the database
 	user, err := app.Models.User.GetByEmail(requestPayload.Email)
 	if err != nil {
-		app.writeError(w, errors.New("invalid credential"), http.StatusBadRequest)
+		log.Println("Error getting user", err)
+		app.writeError(w, errors.New("invalid credentials"), http.StatusBadRequest)
 		return
 	}
 
-	// Compare password
 	valid, err := user.PasswordMatches(requestPayload.Password)
 	if err != nil || !valid {
-		app.writeError(w, errors.New("invalid credential"), http.StatusBadRequest)
+		app.writeError(w, errors.New("invalid password"), http.StatusUnauthorized)
 		return
 	}
 
-	res := jsonResponse{
+	payload := jsonResponse{
 		Error:   false,
-		Message: fmt.Sprint("Welcome, ", user.FirstName),
+		Message: fmt.Sprintf("Logged in user %s", user.Email),
 		Data:    user,
 	}
 
-	app.writeJson(w, http.StatusOK, res)
+	app.writeJson(w, http.StatusAccepted, payload)
 }
