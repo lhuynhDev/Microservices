@@ -51,6 +51,8 @@ func (app *Config) writeJson(w http.ResponseWriter, status int,
 	if err != nil {
 		return err
 	}
+
+	return nil
 }
 
 func (app *Config) writeError(w http.ResponseWriter, err error, status ...int) {
