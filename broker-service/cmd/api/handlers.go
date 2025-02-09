@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/lhuynhDev/Microservices/broker/event"
 )
 
 type RequestPayload struct {
@@ -55,7 +57,8 @@ func (app *Config) HandleSumition(w http.ResponseWriter, r *http.Request) {
 	case "auth":
 		app.authenticate(w, requestPayload.Auth)
 	case "log":
-		app.logItem(w, requestPayload.Log)
+		//app.logItem(w, requestPayload.Log)
+		app.logEventViaRabbit(w, requestPayload.Log)
 	case "mail":
 		app.sendMail(w, requestPayload.Mail)
 	default:
@@ -209,4 +212,36 @@ func (app *Config) sendMail(w http.ResponseWriter, m mailPayload) {
 	payload.Data = jsonFromService.Data
 
 	app.writeJson(w, http.StatusAccepted, payload)
+}
+
+// logEvent with RabbitMQ
+func (app *Config) logEventViaRabbit(w http.ResponseWriter, logPayLoad LogPayload) {
+	if err := app.pushToQueue(logPayLoad.Name, logPayLoad.Data); err != nil {
+		app.writeError(w, err)
+		return
+	}
+	var payload jsonResponse
+	payload.Error = false
+	payload.Message = "Logged by RabbitMQ!"
+
+	app.writeJson(w, http.StatusAccepted, payload)
+}
+
+func (app *Config) pushToQueue(name, msg string) error {
+	emitter, err := event.NewEmitter(app.RabbitConn)
+	if err != nil {
+		return err
+	}
+
+	payload := LogPayload{
+		Name: name,
+		Data: msg,
+	}
+
+	jsonData, _ := json.MarshalIndent(payload, "", "\t")
+	if err := emitter.Emit(string(jsonData), "log.INFO"); err != nil {
+		return err
+	}
+
+	return nil
 }
