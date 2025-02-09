@@ -5,60 +5,64 @@ import (
 	"listener-service/event"
 	"log"
 	"math"
+	"os"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-const ()
-
-func connect() (*amqp.Connection, error) {
-	var count int64
-	var backOff = 1 * time.Second
-	var conn *amqp.Connection
-
-	for {
-		c, err := amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
-		if err != nil {
-			fmt.Println("Failed to connect to RabbitMQ")
-			count++
-		} else {
-			log.Println("Connected to RabbitMQ")
-			conn = c
-			break
-		}
-		if count > 5 {
-			fmt.Println("Failed to connect to RabbitMQ after 5 attempts")
-			return nil, err
-		}
-		backOff = time.Duration(math.Pow(2, float64(count))) * time.Second
-		log.Printf("Retrying in %d seconds", backOff)
-		time.Sleep(backOff)
-		continue
-
-	}
-	return conn, nil
-}
-
 func main() {
-	// Connect to rabbitmq
+	// try to connect to rabbitmq
 	rabbitConn, err := connect()
 	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %s", err)
+		log.Println(err)
+		os.Exit(1)
 	}
 	defer rabbitConn.Close()
-	// Start to listen to the queue
-	log.Println("Listening to the queue")
 
-	// Create the consumer
+	// start listening for messages
+	log.Println("Listening for and consuming RabbitMQ messages...")
+
+	// create consumer
 	consumer, err := event.NewConsumer(rabbitConn)
 	if err != nil {
-		log.Fatalf("Failed to create consumer: %s", err)
+		panic(err)
 	}
 
-	// watch the queue and consume the events
-	if err := consumer.Listen([]string{"log.INFOR", "log.WARNING", "log.ERROR"}); err != nil {
-		log.Println("Failed to consume events: %s", err)
+	// watch the queue and consume events
+	err = consumer.Listen([]string{"log.INFO", "log.WARNING", "log.ERROR"})
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func connect() (*amqp.Connection, error) {
+	var counts int64
+	var backOff = 1 * time.Second
+	var connection *amqp.Connection
+
+	// don't continue until rabbit is ready
+	for {
+		c, err := amqp.Dial("amqp://guest:guest@rabbitmq")
+		if err != nil {
+			fmt.Println("RabbitMQ not yet ready...")
+			counts++
+		} else {
+			log.Println("Connected to RabbitMQ!")
+			connection = c
+			break
+		}
+
+		if counts > 5 {
+			fmt.Println(err)
+			return nil, err
+		}
+
+		backOff = time.Duration(math.Pow(float64(counts), 2)) * time.Second
+		log.Println("backing off...")
+		time.Sleep(backOff)
+		continue
 	}
 
+	return connection, nil
 }

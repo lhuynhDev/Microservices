@@ -3,6 +3,7 @@ package event
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -13,18 +14,32 @@ type Consumer struct {
 	conn      *amqp.Connection
 	queueName string
 }
-type Payload struct {
-	Name string `json:"name"`
-	Data string `json:"data"`
+
+func NewConsumer(conn *amqp.Connection) (Consumer, error) {
+	consumer := Consumer{
+		conn: conn,
+	}
+
+	err := consumer.setup()
+	if err != nil {
+		return Consumer{}, err
+	}
+
+	return consumer, nil
 }
 
-func (c *Consumer) setup() error {
-	channel, err := c.conn.Channel()
+func (consumer *Consumer) setup() error {
+	channel, err := consumer.conn.Channel()
 	if err != nil {
 		return err
 	}
 
 	return declareExchange(channel)
+}
+
+type Payload struct {
+	Name string `json:"name"`
+	Data string `json:"data"`
 }
 
 func (consumer *Consumer) Listen(topics []string) error {
@@ -39,34 +54,36 @@ func (consumer *Consumer) Listen(topics []string) error {
 		return err
 	}
 
-	for _, topic := range topics {
-		if err := ch.QueueBind(
-			q.Name,      // queue name
-			topic,       // routing key
-			"log_topic", // exchange
-			false,       // no-wait
-			nil,         // arguments
-		); err != nil {
+	for _, s := range topics {
+		err := ch.QueueBind(
+			q.Name,
+			s,
+			"logs_topic",
+			false,
+			nil,
+		)
+
+		if err != nil {
 			return err
 		}
 	}
 
-	msgs, err := ch.Consume(q.Name, "", true, false, false, false, nil)
+	messages, err := ch.Consume(q.Name, "", true, false, false, false, nil)
+	if err != nil {
+		return err
+	}
 
 	forever := make(chan bool)
 	go func() {
-		for d := range msgs {
+		for d := range messages {
 			var payload Payload
-			err := json.Unmarshal(d.Body, &payload)
-			if err != nil {
-				log.Printf("Failed to unmarshal message: %s", err)
-				continue
-			}
-			log.Printf("Received a message: %s", payload)
+			_ = json.Unmarshal(d.Body, &payload)
+
 			go handlePayload(payload)
 		}
 	}()
-	log.Printf(" Waiting for messages. [ Exchange: log_topic, Topics: %s]", q.Name)
+
+	fmt.Printf("Waiting for message [Exchange, Queue] [logs_topic, %s]\n", q.Name)
 	<-forever
 
 	return nil
@@ -75,59 +92,48 @@ func (consumer *Consumer) Listen(topics []string) error {
 func handlePayload(payload Payload) {
 	switch payload.Name {
 	case "log", "event":
+		// log whatever we get
 		err := logEvent(payload)
 		if err != nil {
-			log.Printf("Failed to log event: %s", err)
+			log.Println(err)
 		}
+
 	case "auth":
-		// err := authenticate(payload)
-		// if err != nil {
-		// 	log.Printf("Failed to authenticate: %s", err)
-		// }
+		// authenticate
+
+	// you can have as many cases as you want, as long as you write the logic
 
 	default:
 		err := logEvent(payload)
 		if err != nil {
-			log.Printf("Failed to log event: %s", err)
+			log.Println(err)
 		}
 	}
 }
 
-func logEvent(log Payload) error {
-	// create some json we'll send to the log microservice
-	jsonData, _ := json.MarshalIndent(log, "", "\t")
+func logEvent(entry Payload) error {
+	jsonData, _ := json.MarshalIndent(entry, "", "\t")
 
-	// call the service
-	request, err := http.NewRequest("POST", "http://logger-service/log", bytes.NewBuffer(jsonData))
+	logServiceURL := "http://logger-service/log"
+
+	request, err := http.NewRequest("POST", logServiceURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}
+
 	request.Header.Set("Content-Type", "application/json")
+
 	client := &http.Client{}
+
 	response, err := client.Do(request)
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
 
-	// make sure we get back the correct status code
 	if response.StatusCode != http.StatusAccepted {
 		return err
 	}
 
 	return nil
-}
-
-func NewConsumer(conn *amqp.Connection) (Consumer, error) {
-	consumer := Consumer{
-		conn: conn,
-	}
-
-	err := consumer.setup()
-	if err != nil {
-		return Consumer{}, err
-	}
-
-	return consumer, nil
-
 }

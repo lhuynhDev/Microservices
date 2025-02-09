@@ -1,133 +1,139 @@
 package event
 
-import (
-	"bytes"
-	"encoding/json"
-	"log"
-	"net/http"
+// import (
+// 	"bytes"
+// 	"encoding/json"
+// 	"fmt"
+// 	"log"
+// 	"net/http"
 
-	amqp "github.com/rabbitmq/amqp091-go"
-)
+// 	amqp "github.com/rabbitmq/amqp091-go"
+// )
 
-type Consumer struct {
-	conn      *amqp.Connection
-	queueName string
-}
-type Payload struct {
-	Name string `json:"name"`
-	Data string `json:"data"`
-}
+// type Consumer struct {
+// 	conn *amqp.Connection
+// 	queueName string
+// }
 
-func (c *Consumer) setup() error {
-	channel, err := c.conn.Channel()
-	if err != nil {
-		return err
-	}
+// func NewConsumer(conn *amqp.Connection) (Consumer, error) {
+// 	consumer := Consumer{
+// 		conn: conn,
+// 	}
 
-	return declareExchange(channel)
-}
+// 	err := consumer.setup()
+// 	if err != nil {
+// 		return Consumer{}, err
+// 	}
 
-func (consumer *Consumer) Listen(topics []string) error {
-	ch, err := consumer.conn.Channel()
-	if err != nil {
-		return err
-	}
-	defer ch.Close()
+// 	return consumer, nil
+// }
 
-	q, err := declareRandomQueue(ch)
-	if err != nil {
-		return err
-	}
+// func (consumer *Consumer) setup() error {
+// 	channel, err := consumer.conn.Channel()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	for _, topic := range topics {
-		if err := ch.QueueBind(
-			q.Name,      // queue name
-			topic,       // routing key
-			"log_topic", // exchange
-			false,       // no-wait
-			nil,         // arguments
-		); err != nil {
-			return err
-		}
-	}
+// 	return declareExchange(channel)
+// }
 
-	msgs, err := ch.Consume(q.Name, "", true, false, false, false, nil)
+// type Payload struct {
+// 	Name string `json:"name"`
+// 	Data string `json:"data"`
+// }
 
-	forever := make(chan bool)
-	go func() {
-		for d := range msgs {
-			var payload Payload
-			err := json.Unmarshal(d.Body, &payload)
-			if err != nil {
-				log.Printf("Failed to unmarshal message: %s", err)
-				continue
-			}
-			log.Printf("Received a message: %s", payload)
-			go handlePayload(payload)
-		}
-	}()
-	log.Printf(" Waiting for messages. [ Exchange: logs_topic, Topics: %s]", q.Name)
-	<-forever
+// func (consumer *Consumer) Listen(topics []string) error {
+// 	ch, err := consumer.conn.Channel()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer ch.Close()
 
-	return nil
-}
+// 	q, err := declareRandomQueue(ch)
+// 	if err != nil {
+// 		return err
+// 	}
 
-func handlePayload(payload Payload) {
-	switch payload.Name {
-	case "log", "event":
-		err := logEvent(payload)
-		if err != nil {
-			log.Printf("Failed to log event: %s", err)
-		}
-	case "auth":
-		// err := authenticate(payload)
-		// if err != nil {
-		// 	log.Printf("Failed to authenticate: %s", err)
-		// }
+// 	for _, s := range topics {
+// 		ch.QueueBind(
+// 			q.Name,
+// 			s,
+// 			"logs_topic",
+// 			false,
+// 			nil,
+// 		)
 
-	default:
-		err := logEvent(payload)
-		if err != nil {
-			log.Printf("Failed to log event: %s", err)
-		}
-	}
-}
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
 
-func logEvent(log Payload) error {
-	// create some json we'll send to the log microservice
-	jsonData, _ := json.MarshalIndent(log, "", "\t")
+// 	messages, err := ch.Consume(q.Name, "", true, false, false, false, nil)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// call the service
-	request, err := http.NewRequest("POST", "http://logger-service/log", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	response, err := client.Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
+// 	forever := make(chan bool)
+// 	go func() {
+// 		for d := range messages {
+// 			var payload Payload
+// 			_ = json.Unmarshal(d.Body, &payload)
 
-	// make sure we get back the correct status code
-	if response.StatusCode != http.StatusAccepted {
-		return err
-	}
+// 			go handlePayload(payload)
+// 		}
+// 	}()
 
-	return nil
-}
+// 	fmt.Printf("Waiting for message [Exchange, Queue] [logs_topic, %s]\n", q.Name)
+// 	<-forever
 
-func NewConsumer(conn *amqp.Connection) (Consumer, error) {
-	consumer := Consumer{
-		conn: conn,
-	}
+// 	return nil
+// }
 
-	err := consumer.setup()
-	if err != nil {
-		return Consumer{}, err
-	}
+// func handlePayload(payload Payload) {
+// 	switch payload.Name {
+// 	case "log", "event":
+// 		// log whatever we get
+// 		err := logEvent(payload)
+// 		if err != nil {
+// 			log.Println(err)
+// 		}
 
-	return consumer, nil
+// 	case "auth":
+// 		// authenticate
 
-}
+// 	// you can have as many cases as you want, as long as you write the logic
+
+// 	default:
+// 		err := logEvent(payload)
+// 		if err != nil {
+// 			log.Println(err)
+// 		}
+// 	}
+// }
+
+// func logEvent(entry Payload) error {
+// 	jsonData, _ := json.MarshalIndent(entry, "", "\t")
+
+// 	logServiceURL := "http://logger-service/log"
+
+// 	request, err := http.NewRequest("POST", logServiceURL, bytes.NewBuffer(jsonData))
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	request.Header.Set("Content-Type", "application/json")
+
+// 	client := &http.Client{}
+
+// 	response, err := client.Do(request)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer response.Body.Close()
+
+// 	if response.StatusCode != http.StatusAccepted {
+// 		return err
+// 	}
+
+// 	return nil
+// }

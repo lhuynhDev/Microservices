@@ -7,11 +7,11 @@ import (
 )
 
 type Emitter struct {
-	conn *amqp.Connection
+	connection *amqp.Connection
 }
 
 func (e *Emitter) setup() error {
-	channel, err := e.conn.Channel()
+	channel, err := e.connection.Channel()
 	if err != nil {
 		return err
 	}
@@ -20,15 +20,30 @@ func (e *Emitter) setup() error {
 	return declareExchange(channel)
 }
 
-func (e *Emitter) Emit(event string, severity string) error {
-	channel, err := e.conn.Channel()
+func NewEventEmitter(conn *amqp.Connection) (Emitter, error) {
+	emitter := Emitter{
+		connection: conn,
+	}
+
+	err := emitter.setup()
+	if err != nil {
+		return Emitter{}, err
+	}
+
+	return emitter, nil
+}
+
+func (e *Emitter) Push(event string, severity string) error {
+	channel, err := e.connection.Channel()
 	if err != nil {
 		return err
 	}
 	defer channel.Close()
-	log.Println("Emitting event: ", event)
-	return channel.Publish(
-		"log_topic",
+
+	log.Println("Pushing to channel")
+
+	err = channel.Publish(
+		"logs_topic",
 		severity,
 		false,
 		false,
@@ -37,14 +52,9 @@ func (e *Emitter) Emit(event string, severity string) error {
 			Body:        []byte(event),
 		},
 	)
-}
-
-func NewEmitter(conn *amqp.Connection) (Emitter, error) {
-	emitter := Emitter{conn: conn}
-
-	if err := emitter.setup(); err != nil {
-		return Emitter{}, err
+	if err != nil {
+		return err
 	}
 
-	return emitter, nil
+	return nil
 }
