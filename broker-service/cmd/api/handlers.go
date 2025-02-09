@@ -11,6 +11,14 @@ type RequestPayload struct {
 	Action string      `json:"action"`
 	Auth   AuthPayload `json:"auth,omitempty"`
 	Log    LogPayload  `json:"log,omitempty"`
+	Mail   mailPayload `json:"mail,omitempty"`
+}
+
+type mailPayload struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Subject string `json:"subject"`
+	Message string `json:"message"`
 }
 
 type AuthPayload struct {
@@ -48,6 +56,8 @@ func (app *Config) HandleSumition(w http.ResponseWriter, r *http.Request) {
 		app.authenticate(w, requestPayload.Auth)
 	case "log":
 		app.logItem(w, requestPayload.Log)
+	case "mail":
+		app.sendMail(w, requestPayload.Mail)
 	default:
 		app.writeError(w, errors.New("unknown action"))
 	}
@@ -148,6 +158,54 @@ func (app *Config) logItem(w http.ResponseWriter, log LogPayload) {
 	var payload jsonResponse
 	payload.Error = false
 	payload.Message = "Logged!"
+	payload.Data = jsonFromService.Data
+
+	app.writeJson(w, http.StatusAccepted, payload)
+}
+
+func (app *Config) sendMail(w http.ResponseWriter, m mailPayload) {
+	// create some json we'll send to the mail microservice
+	jsonData, _ := json.MarshalIndent(m, "", "\t")
+
+	// call the service
+	request, err := http.NewRequest("POST", "http://mailer-service/send", bytes.NewBuffer(jsonData))
+	if err != nil {
+		app.writeError(w, err)
+		return
+	}
+	request.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		app.writeError(w, err)
+		return
+	}
+	defer response.Body.Close()
+
+	// make sure we get back the correct status code
+	if response.StatusCode != http.StatusAccepted {
+		app.writeError(w, errors.New("error calling mail service"))
+		return
+	}
+
+	// create a variable we'll read response.Body into
+	var jsonFromService jsonResponse
+
+	// decode the json from the mail service
+	err = json.NewDecoder(response.Body).Decode(&jsonFromService)
+	if err != nil {
+		app.writeError(w, err)
+		return
+	}
+
+	if jsonFromService.Error {
+		app.writeError(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	var payload jsonResponse
+	payload.Error = false
+	payload.Message = "Mail sent to " + m.To
 	payload.Data = jsonFromService.Data
 
 	app.writeJson(w, http.StatusAccepted, payload)
