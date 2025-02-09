@@ -1,0 +1,65 @@
+# Binaries & Compiled Files
+*.exe
+*.dll
+*.dylib
+*.so
+*.o
+*.a
+*.out
+*.test
+*.prof
+*.swp
+
+# Golang Build & Dependencies
+/bin/
+/pkg/
+/dist/
+vendor/
+
+# Logs & Debugging
+*.log
+*.trace
+*.prof
+debug/
+
+# Environment Files
+.env
+.env.local
+.env.*.local
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.iml
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Go Modules & Caches
+go.sum
+go.work
+go.work.sum
+!go.mod
+
+# Docker & Kubernetes
+**/docker-compose.override.yml
+**/docker-compose.dev.yml
+Dockerfile
+*.dockerfile
+build/
+
+# PostgreSQL & MongoDB Data
+project/db-data/postgres/
+project/db-data/mongo/
+
+# Frontend (if any)
+front-end/node_modules/
+front-end/.next/
+front-end/.nuxt/
+front-end/build/
+front-end/dist/
+
+# Temporary Files
+*.tmp
+*.swp
