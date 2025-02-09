@@ -12,3 +12,9 @@ project/db-data
 .env
 
 .codegpt
+
+# Ignore the binary files
+broker-service/brokerApp
+logger-service/loggerServiceApp
+authentication-service/authApp
+front-end/frontApp
