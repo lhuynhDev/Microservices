@@ -35,8 +35,7 @@ func (app *Config) Authenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Log
-
+	// Log the request
 	if err := app.LogRequest("Authenticate",
 		fmt.Sprintf("User %s authenticated", user.Email)); err != nil {
 		log.Println("Error logging request", err)
@@ -65,7 +64,7 @@ func (app *Config) LogRequest(name, data string) error {
 		return err
 	}
 
-	logServiceURL := "http://log-service/log"
+	logServiceURL := "http://logger-service/log"
 
 	request, err := http.NewRequest("POST", logServiceURL, bytes.NewBuffer(jsonData))
 	if err != nil {
