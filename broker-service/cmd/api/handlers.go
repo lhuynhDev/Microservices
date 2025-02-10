@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/rpc"
 
 	"github.com/lhuynhDev/Microservices/broker/event"
 )
@@ -33,6 +34,11 @@ type LogPayload struct {
 	Data string `json:"data"`
 }
 
+type RPCPayload struct {
+	Name string
+	Data string
+}
+
 func (app *Config) Broker(w http.ResponseWriter, r *http.Request) {
 	payload := jsonResponse{
 		Error:   false,
@@ -58,7 +64,9 @@ func (app *Config) HandleSumition(w http.ResponseWriter, r *http.Request) {
 		app.authenticate(w, requestPayload.Auth)
 	case "log":
 		//app.logItem(w, requestPayload.Log)
-		app.logEventViaRabbit(w, requestPayload.Log)
+		//app.logEventViaRabbit(w, requestPayload.Log)
+		app.LogItemViaRPC(w, requestPayload.Log)
+
 	case "mail":
 		app.sendMail(w, requestPayload.Mail)
 	default:
@@ -244,4 +252,29 @@ func (app *Config) pushToQueue(name, msg string) error {
 	}
 
 	return nil
+}
+
+func (app *Config) LogItemViaRPC(w http.ResponseWriter, log LogPayload) {
+	client, err := rpc.Dial("tcp", "logger-service:5001")
+	if err != nil {
+		app.writeError(w, err)
+		return
+	}
+
+	rpcPayload := RPCPayload{
+		Name: log.Name,
+		Data: log.Data,
+	}
+
+	var response string
+	if err := client.Call("RPCServer.LogInfo", rpcPayload, &response); err != nil {
+		app.writeError(w, err)
+		return
+	}
+
+	var payload jsonResponse
+	payload.Error = false
+	payload.Message = response
+
+	app.writeJson(w, http.StatusAccepted, payload)
 }
