@@ -76,6 +76,9 @@ func main() {
 	// start rpc server
 	go app.rpcListen()
 
+	// start grpc server
+	go app.gRPCListen()
+
 	// start web server
 	// go app.serve()
 	log.Println("Starting service on port", webPort)
